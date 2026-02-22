@@ -224,8 +224,8 @@ image = (
 )
 
 
-@app.function(image=image, gpu="A100-40GB:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
-# @app.function(image=image, gpu="B200:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
+# @app.function(image=image, gpu="A100-40GB:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
+@app.function(image=image, gpu="B200:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
 def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
     """Run benchmark on Modal B200 and return results."""
     if config is None:
@@ -244,6 +244,22 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
 
     if not workloads:
         raise ValueError(f"No workloads found for definition '{solution.definition}'")
+
+
+    from flashinfer_bench.agents import flashinfer_bench_run_ncu
+
+    output = flashinfer_bench_run_ncu(
+        trace_set_path=TRACE_SET_PATH,
+        solution=solution,
+        workload=workloads[0],
+        set="detailed",
+        page="details",
+        timeout=120,
+    )
+    print(output)
+    print("donne@@@")
+
+    return
 
     bench_trace_set = TraceSet(
         root=trace_set.root,
