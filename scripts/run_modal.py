@@ -153,14 +153,14 @@ class Benchmark:
                     logger.info(f"All solutions already evaluated for workload {workload.uuid}")
                     continue
                 
-                print(">>> running 2....")
-                # try:
-                results = self._runner.run_workload(
-                    definition, workload, sols_to_run, self._config, self._trace_set.root
-                )
-                # except RuntimeError as e:
-                #     logger.error(f"Failed to run workload {workload.uuid}: {e}", exc_info=True)
-                #     continue
+                
+                try:
+                    results = self._runner.run_workload(
+                        definition, workload, sols_to_run, self._config, self._trace_set.root
+                    )
+                except RuntimeError as e:
+                    logger.error(f"Failed to run workload {workload.uuid}: {e}", exc_info=True)
+                    continue
 
                 for sol_name, ev in results.items():
                     trace = Trace(
