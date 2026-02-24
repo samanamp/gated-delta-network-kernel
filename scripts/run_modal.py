@@ -246,20 +246,20 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
         raise ValueError(f"No workloads found for definition '{solution.definition}'")
 
 
-    from flashinfer_bench.agents import flashinfer_bench_run_ncu
+    # from flashinfer_bench.agents import flashinfer_bench_run_ncu
 
-    output = flashinfer_bench_run_ncu(
-        trace_set_path=TRACE_SET_PATH,
-        solution=solution,
-        workload=workloads[0],
-        set="detailed",
-        page="details",
-        timeout=120,
-    )
-    print(output)
-    print("donne@@@")
+    # output = flashinfer_bench_run_ncu(
+    #     trace_set_path=TRACE_SET_PATH,
+    #     solution=solution,
+    #     workload=workloads[0],
+    #     set="detailed",
+    #     page="details",
+    #     timeout=120,
+    # )
+    # print(output)
+    # print("donne@@@")
 
-    return
+    # return
 
     bench_trace_set = TraceSet(
         root=trace_set.root,

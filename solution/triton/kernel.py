@@ -147,7 +147,7 @@ def tritonGDN(q, k, v, state, A_log, a, dt_bias, b, scale, out, state_out):
     # state_out = torch.empty_like(state)
     
     # Launch triton kernel
-    BLOCK_V = min(128, triton.next_power_of_2(V))
+    BLOCK_V = min(8, triton.next_power_of_2(V))
     grid = (B, Hv, triton.cdiv(V, BLOCK_V))
     
     gdn_kernel[grid](
@@ -176,7 +176,7 @@ def tritonGDN(q, k, v, state, A_log, a, dt_bias, b, scale, out, state_out):
         out.stride(0), out.stride(2), out.stride(3),
         # Constexprs
         V=V, K=K, BLOCK_V=BLOCK_V,
-        Hv=Hv, Hq=Hq, scale=float(scale)
+        Hv=Hv, Hq=Hq, scale=scale
     )
     
     return out, state_out
