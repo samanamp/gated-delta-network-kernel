@@ -50,11 +50,13 @@ def gdn_kernel(
     dt_bias_data_ptr = dt_bias_ptr + h*stride_dt_bias
     dt_bias_data = tl.load(dt_bias_data_ptr)
 
-    x = a_data.to(tl.float32) + dt_bias_data.to(tl.float32)
+    x = a_data + dt_bias_data
     # g = exp(-exp(A_log)+Softplus(x))
     alog_data_ptr = alog_ptr + h*stride_alog
-    alog_data = tl.load(alog_data_ptr).to(tl.float32)
-    g = tl.exp(-tl.exp(alog_data) * tl.log(1.0 + tl.exp(x)))
+    alog_data = tl.load(alog_data_ptr)
+    g = (tl.exp(-tl.exp(alog_data.to(tl.float32)) * tl.log(1.0 + tl.exp(x.to(tl.float32)))))
+    # softplus_x = tl.where(x > 20.0, x, tl.log(1.0 + tl.exp(x)))
+    # g = tl.exp(-tl.exp(alog_data) * softplus_x)
 
     # beta = sigmoid (b)
     b_data_ptr = b_ptr + b * stride_b_b + h * stride_b_h
