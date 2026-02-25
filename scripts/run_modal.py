@@ -30,7 +30,7 @@ from collections import defaultdict
 from typing import List, Set, Tuple
 
 from flashinfer_bench.compile import BuilderRegistry
-from flashinfer_bench.data import EvaluationStatus, Trace, TraceSet
+from flashinfer_bench.data import EvaluationStatus, Trace, TraceSet, Workload
 
 from flashinfer_bench.bench.runner import IsolatedRunner, PersistentRunner
 
@@ -219,7 +219,15 @@ trace_volume = modal.Volume.from_name("flashinfer-trace", create_if_missing=True
 TRACE_SET_PATH = "/data"
 
 image = (
-    modal.Image.debian_slim(python_version="3.12")
+    modal.Image.debian_slim(python_version="3.12").apt_install("wget")
+    .run_commands(
+        "wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb",
+        "dpkg -i cuda-keyring_1.1-1_all.deb",
+        "apt-get update",
+        "apt-get install -y nsight-compute-2025.4.1",
+        'echo "export PATH=/opt/nvidia/nsight-compute/2025.4.1:$PATH" >> /etc/bash.bashrc',
+    )
+    .env({"PATH": "/opt/nvidia/nsight-compute/2025.4.1:/usr/local/bin:/usr/bin:/bin"})
     .pip_install("flashinfer-bench", "torch", "triton", "numpy")
 )
 
@@ -228,6 +236,40 @@ image = (
 @app.function(image=image, gpu="B200:1", timeout=3600, volumes={TRACE_SET_PATH: trace_volume})
 def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
     """Run benchmark on Modal B200 and return results."""
+
+    import subprocess
+
+#     # Simple CUDA kernel via PyTorch
+#     script = """
+# import torch
+
+# x = torch.randn(1024, 1024, device='cuda')
+# # warmup
+# for _ in range(3):
+#     y = torch.mm(x, x)
+# torch.cuda.synchronize()
+
+# # profiled
+# y = torch.mm(x, x)
+# torch.cuda.synchronize()
+#     """
+
+#     result = subprocess.run(
+#         [
+#             "ncu",
+#             "--set", "basic",
+#             "--target-processes", "all",
+#             "--launch-count", "1",
+#             "python3", "-c", script,
+#         ],
+#         capture_output=True,
+#         text=True,
+#         timeout=60,
+#     )
+#     print("STDOUT:", result.stdout[-2000:] if result.stdout else "")
+#     print("STDERR:", result.stderr[-2000:] if result.stderr else "")
+#     print("Return code:", result.returncode)
+
     if config is None:
         config = BenchmarkConfig(warmup_runs=3, iterations=100, num_trials=5)
 
@@ -246,20 +288,93 @@ def run_benchmark(solution: Solution, config: BenchmarkConfig = None) -> dict:
         raise ValueError(f"No workloads found for definition '{solution.definition}'")
 
 
-    # from flashinfer_bench.agents import flashinfer_bench_run_ncu
+    # print(workloads[0].model_dump_json(indent=2))
+
+    from flashinfer_bench.agents import flashinfer_bench_run_ncu
+    # workload_str="/data/workloads/gdn/gdn_decode_qk4_v8_d128_k_last.jsonl"
+    # path2 = Path(workload_str)
+    # print(path2.read_text())
+    # workload = Workload.model_validate_json(workloads[0])
+    workload = workloads[0].workload
+    workload_str = workload.model_dump_json()
+    Workload.model_validate_json(workload_str)
+
+    import os
+
+    tmpdir = "/dev/shm/ncu_run"
+    os.makedirs(tmpdir, exist_ok=True)
+
+    # Write workload.json and solution.json into data-dir
+    with open(os.path.join(tmpdir, "workload.json"), "w") as f:
+        f.write(workload.model_dump_json())
+
+    with open(os.path.join(tmpdir, "solution.json"), "w") as f:
+        f.write(solution.model_dump_json())
+    
+    with open(os.path.join(tmpdir, "definition.json"), "w") as f:
+        f.write(definition.model_dump_json())
+
+    # Check what the runner expects
+    help_result = subprocess.run(
+        ["python3", "-m", "flashinfer_bench.agents._solution_runner", "--help"],
+        capture_output=True, text=True, timeout=10,
+    )
+    print("Runner help:", help_result.stdout)
+
+    # ===============Get all kernels===================
+    # result = subprocess.run(
+    #     [
+    #         "ncu",
+    #         "--set", "none",
+    #         "--target-processes", "all",
+    #         "--launch-count", "100",
+    #         "--print-summary", "per-kernel",
+    #         "python3", "-m", "flashinfer_bench.agents._solution_runner",
+    #         "--data-dir", tmpdir,
+    #         "--trace-set-path", TRACE_SET_PATH,
+    #     ],
+    #     capture_output=True,
+    #     text=True,
+    #     timeout=120,
+    # )
+    # print(result.stdout)
+
+    # Run under ncu
+    result = subprocess.run(
+        [
+            "ncu",
+            "--set", "detailed",
+            # "--set", "basic",
+            "--target-processes", "all",
+            # "--print-summary", "per-kernel",
+            "--launch-count", "1",
+            "--kernel-name", "gdn_kernel",
+            "python3", "-m", "flashinfer_bench.agents._solution_runner",
+            "--data-dir", tmpdir,
+            "--trace-set-path", TRACE_SET_PATH,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    # print("STDOUT:", result.stdout[-3000:])
+    print("STDOUT:", result.stdout)
+    print("STDERR:", result.stderr[-3000:])
+    print("Return code:", result.returncode)
 
     # output = flashinfer_bench_run_ncu(
     #     trace_set_path=TRACE_SET_PATH,
     #     solution=solution,
-    #     workload=workloads[0],
+    #     workload=workload,
     #     set="detailed",
     #     page="details",
+    #     # kernel_name=".*",
     #     timeout=120,
     # )
     # print(output)
     # print("donne@@@")
 
-    # return
+    return
 
     bench_trace_set = TraceSet(
         root=trace_set.root,
